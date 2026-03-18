@@ -63,4 +63,67 @@ Output JSON now:
   }
 }
 
-module.exports = { getActions };
+require("dotenv").config();
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+async function getTestPlan(goal) {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const prompt = `
+You are a strict JSON generator.
+
+Generate a Playwright test plan.
+
+Goal: "${goal}"
+
+IMPORTANT:
+- The app URL is: http://localhost/
+- ALWAYS use this URL
+- NEVER use example.com or any external URL
+
+Rules:
+- Output ONLY valid JSON
+- NO explanation
+- NO markdown
+
+Format:
+{
+  "steps": [
+    { "type": "goto", "url": "http://localhost/" },
+    { "type": "fill", "selector": "input[type=\\"email\\"]", "value": "admin@example.com" },
+    { "type": "fill", "selector": "input[type=\\"password\\"]", "value": "admin123" },
+    { "type": "click", "selector": "button[type=\\"submit\\"]" }
+  ]
+}
+`;
+
+  const result = await model.generateContent(prompt);
+  const response = result.response.text();
+
+  console.log("RAW GEMINI:", response);
+
+  // Extract JSON safely
+  const start = response.indexOf("{");
+  const end = response.lastIndexOf("}") + 1;
+
+  if (start === -1 || end === -1) {
+    console.log("❌ No JSON found");
+    return { steps: [] };
+  }
+
+  const clean = response.slice(start, end);
+
+  try {
+    return JSON.parse(clean);
+  } catch (e) {
+    console.log("❌ JSON parse failed");
+    console.log(clean);
+    return { steps: [] };
+  }
+}
+
+module.exports = { getActions, getTestPlan };
+  
